@@ -1,7 +1,7 @@
 from rest_framework.serializers import ModelSerializer
 from rest_framework import serializers 
 from rest_framework.permissions import IsAuthenticated
-from .models import Product,Category,Vendor,Cart,CartItem,CustomUser
+from .models import Product,Category,Vendor,Cart,CartItem,CustomUser,Guest
 
 
 
@@ -23,7 +23,14 @@ class VendorSerilizer(ModelSerializer):
         model = Vendor
         fields = ["shop_name",'id']
      
-   
+
+class GuestSerilizer(ModelSerializer):
+
+    
+    class Meta:
+        model = Guest
+        fields = ["guest_id",'id']
+     
 
 
 class ProductSerializer(ModelSerializer):
@@ -35,7 +42,8 @@ class ProductSerializer(ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['name',
+        fields = ['id',
+                  'name',
                   'price',
                   'description',
                   'category',

@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+import uuid
 
 # Create your models here.
  
@@ -17,7 +18,12 @@ class CustomUser(AbstractUser):
     address = models.CharField(max_length=255, blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
 
-
+class Guest(models.Model):
+    guest_id = models.UUIDField( default=uuid.uuid4 ,unique=True,editable=False)
+    created_at = models.DateField(auto_now_add=True)
+    def __str__(self):
+        return str(self.guest_id)
+    
 
 
 class client(models.Model):
@@ -78,7 +84,8 @@ class Product(models.Model):
 
 
 class Cart(models.Model):
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='cart')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='cart' ,null=True,blank=True)
+    guest = models.ForeignKey(Guest, on_delete=models.CASCADE, related_name='cart' ,null=True,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     @property
@@ -88,7 +95,10 @@ class Cart(models.Model):
     def total(self):
         return sum(item.total_price for item in self.items.all())
     def __str__(self):
-        return f"Cart of {self.user.username}"
+        if self.user:
+            return f"Cart of {self.user.username}"
+        else:
+            return f"Cart of {self.guest.guest_id}"
     
     
 
@@ -100,5 +110,8 @@ class CartItem(models.Model):
     def total_price(self):
         return self.product.price * self.quantity
     def __str__(self):
-        return f"{self.quantity} x {self.product.name} in {self.cart.user.username}'s cart"
-    
+        if self.cart.user:
+            return f"{self.quantity} x {self.product.name} in {self.cart.user}'s cart"
+        else:
+            return f"{self.quantity} x {self.product.name} in {self.cart.guest}'s cart"
+            
