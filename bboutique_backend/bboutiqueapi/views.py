@@ -1,19 +1,21 @@
 from django.shortcuts import render,get_object_or_404
 from django.contrib.auth.hashers import check_password
 from rest_framework.decorators import api_view,permission_classes
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated,AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import viewsets
-from .models import CustomUser,client, Vendor,Product,Category,Cart,CartItem,Guest
+from .models import CustomUser,client, Vendor,Product,Category,Cart,CartItem,Guest,ProductVariant
 from rest_framework.authtoken.models import Token
-from .serializers import ProductSerializer,VendorSerilizer,CategorySerializer,VendorSerializer2,CategorySerialize2,CartSerializer,CartItemSerializer,CustumUserSerializer,GuestSerilizer
+from .serializers import ProductSerializer,VendorSerilizer,CategorySerializer,VendorSerializer2,CategorySerialize2,CartSerializer,CartItemSerializer,CustumUserSerializer,GuestSerilizer,ProductVariantSerializer
 # Create your views here.
 
 @api_view(['POST'])
-def user_loogin(request):
+def user_login(request):
     try:
-        username = request.data.get('username')
-        password = request.data.get('password')
+        username = request.data['username']
+        password = request.data['password']
 
     except:
         return Response({'masage':'Fields given dont match'})
@@ -22,9 +24,15 @@ def user_loogin(request):
 
     if user:
         if check_password(password,user.password):
-            token,created = Token.objects.get_or_create(user=user)
+            refresh = RefreshToken.for_user(user)
+
             serializer = CustumUserSerializer(user)
-            return Response({"message": "User logged in successfully", "token": token.key,'data':serializer.data}, status=201)
+            response = Response({"message": "User logged in successfully",'data':serializer.data}, status=201)
+            response.set_cookie(key='access_token',value=str(refresh.access_token),httponly=True,samesite="Lax")
+            response.set_cookie(key="refresh_token",value=str(refresh),httponly=True,samesite="Lax")
+            return response
+            
+            return 
         else:
             return Response({"message": "incorrect password"}, status=201)
 
@@ -35,10 +43,11 @@ def user_loogin(request):
 @api_view(['POST'])
 def user_registration(request):
     try:
-        username = request.data.get('username')
+        username = request.data['username']
         email = request.data.get('email')
-        password1 = request.data.get('password1')
-        password2 = request.data.get('password2')
+        password1 = request.data['password1']
+        password2 = request.data['password2']
+       
         
     except:
         return Response({'message':'Fields given dont match'})
@@ -50,47 +59,83 @@ def user_registration(request):
     user.save()
     client.objects.create(user=user)   # Create a client profile for the user
     
-    token, created = Token.objects.get_or_create(user=user)
+
+    refresh = RefreshToken.for_user(user)
+
     serializer = CustumUserSerializer(user)
-    return Response({"message": "User registered successfully", "token": token.key,'data':serializer.data}, status=201)
+    response = Response({"message": "User registered successfully", 'data':serializer.data}, status=201)
+    response.set_cookie(key='access_token',value=str(refresh.access_token),httponly=True,samesite="Lax")
+    response.set_cookie(key="refresh_token",value=str(refresh),httponly=True,samesite="Lax")
+    return response
 
 
+
+
+class RefreshTokenView(APIView):
+    def post(self, request):
+        refresh_token = request.COOKIES.get('refresh_token')
+        if not refresh_token:
+            return Response({"error": "No refresh token"}, status=401)
+       
+        try:
+            refresh = RefreshToken(refresh_token)
+            new_access = refresh.access_token
+            response = Response({"message": "Token refreshed"})
+            response.set_cookie(
+                key='access_token',
+                value=str(new_access),
+                httponly=True,
+                samesite='Lax',
+                path='/'
+            )
+            return response
+        except Exception:
+            return Response({"error": "Invalid refresh token"}, status=401)
 
 @api_view(['POST','GET'])
 @permission_classes([AllowAny])
 def cart_display(request):
-    cart = None
+    cart_guest = None
+    
+    
+    guest_id = request.query_params.get('guest_id')or request.data.get('guest_id')or request.COOKIES.get('guest_id')
+    if guest_id:
+        guest = get_object_or_404(Guest,guest_id = guest_id)
+        cart_guest,_ = Cart.objects.get_or_create(guest=guest)
     if request.user.is_authenticated:
         user = request.user
         cart,created = Cart.objects.get_or_create(user=user) # Get or create a cart for the user
-    elif request.query_params.get('guest_id')or request.data.get('guest_id')or request.COOKIES.get('guest_id'):
-         print('hh')
-         
-         guest_id = request.query_params.get('guest_id')
-         guest = get_object_or_404(Guest,guest_id = guest_id)
-         cart_guest,_ = Cart.objects.get_or_create(guest=guest)
-         if cart is not None:
+        if cart_guest:
             for item in cart_guest.items.all():
                 cart_item, created = CartItem.objects.get_or_create(cart=cart, product=item.product)
-                if not created:
-                    cart_item.quantity =item.quantity
-                    cart_item.save()
+
+                cart_item.quantity =item.quantity
+                item.delete()
+                cart_item.save()
+                cart.save()
+    
+        
+        
+
+
+        
                     
-                else:
-                    cart_item.quantity = item.quantity
-                    cart_item.save()
-                    
+
                 
-         else:
-              cart = cart_guest
     else:
-         return Response({'error':'an error ocured'},status=404)
+            if not guest_id:
+                 return Response({'error':"guest_id is required"})
+            cart = cart_guest
+    
 
 
    
     if request.method == 'POST':
-        product_id = request.data.get('product_id')
-        quantity = request.data.get('quantity')
+        try:
+            product_id = request.data['product_id']
+            quantity = request.data['quantity']
+        except:
+            return Response({'message':'Fields given dont match'})
         
         product = get_object_or_404(Product,id = product_id)
         cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product)
@@ -118,12 +163,16 @@ def user_profile(request):
 
 
 
-@api_view(['POST'])
+@api_view(['POST','GET'])
 def guest_create(request):
-     guest = Guest.objects.get_or_create()
-     serializer = GuestSerilizer(guest)
-     return Response({'data':serializer.data})
-     
+    guest_id = request.query_params.get('guest_id')or request.data.get('guest_id')or request.COOKIES.get('guest_id')
+    if not guest_id :
+        guest = Guest.objects.create()
+        respose = Response({"guest_id":guest.guest_id,})
+        respose.set_cookie(key="guest_id",value=str(guest.guest_id),httponly=False,samesite="Lax")
+        return respose
+    else:
+         return Response({'info':'allredy have the guest_id'})
 
 
 class ProductViewset(viewsets.ModelViewSet):
@@ -131,7 +180,9 @@ class ProductViewset(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
 
 
-
+class ProductVariantViewset(viewsets.ModelViewSet):
+    queryset = ProductVariant.objects.all()
+    serializer_class = ProductVariantSerializer
 
 class VendorViewset(viewsets.ModelViewSet):
         queryset =Vendor.objects.all()

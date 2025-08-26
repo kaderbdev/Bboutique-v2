@@ -1,5 +1,7 @@
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils.text import slugify
 import uuid
 
 # Create your models here.
@@ -70,17 +72,43 @@ class Category(models.Model):
 class Product(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
+    base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    stock = models.PositiveIntegerField(default=0)
+    slug = models.SlugField(unique=True ,blank=True, null=True)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products')
     image = models.ImageField(upload_to='product_images/', blank=True, null=True)
     vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name='products')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.name)
+            slug = base_slug
+            counter = 1
+            while Product.objects.filter(slug=slug).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
 
+class ProductVariant(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
+    color = models.CharField(max_length=50, blank=True, null=True)
+    size = models.CharField(max_length=50, blank=True, null=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    stock = models.PositiveIntegerField(default=0)
+    storage = models.PositiveIntegerField(default=0)
+    condition = models.CharField(max_length=50, blank=True, null=True)
+    material = models.CharField(max_length=100, blank=True, null=True)
+    image = models.ImageField(upload_to='product_variants/', blank=True, null=True)
 
+
+    def __str__(self):
+        variant_info = [f"Color: {self.color}", f"Size: {self.size}", f"Price: {self.price}", f"Stock: {self.stock}", f"Storage: {self.storage}", f"Condition: {self.condition}", f"Material: {self.material}"]
+        return f"{self.product.name} - " + " - ".join(filter(None, variant_info))
 
 
 class Cart(models.Model):
@@ -108,7 +136,7 @@ class CartItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     @property
     def total_price(self):
-        return self.product.price * self.quantity
+        return self.product.base_price * self.quantity
     def __str__(self):
         if self.cart.user:
             return f"{self.quantity} x {self.product.name} in {self.cart.user}'s cart"

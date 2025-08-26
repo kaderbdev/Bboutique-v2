@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework.authtoken',
+
     'corsheaders',
 
 
@@ -111,12 +111,24 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES':[
-        'rest_framework.authentication.TokenAuthentication',
+        "bboutiqueapi.authenticate.CookieJWTAuthentication",
     ],
     # 'DEFAULT_PERMISSION_CLASSES':[
 
     #     'rest_framework.permissions.IsAuthenticated',
     # ]
+}
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),  # durée d'accès courte
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),    # durée de refresh
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_COOKIE': 'access_token',          # nom cookie access
+    'AUTH_COOKIE_REFRESH': 'refresh_token', # nom cookie refresh
+    'AUTH_COOKIE_HTTP_ONLY': True,          # sécurisé, pas accessible via JS
+    'AUTH_COOKIE_PATH': '/',                # chemin cookie
+    'AUTH_COOKIE_SAMESITE': 'Lax',          # SameSite pour CSRF
 }
 
 CORS_ALLOWED_ORIGINS = [
